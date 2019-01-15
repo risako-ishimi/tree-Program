@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<title>bitcoin</title>
+</head>
+
+<body>
+  <div align="center">
+<header>
+	<div class="container">
+		<div class="header-inner">
+      <div class="head">
+            <p id="rain0"><!--ここに表示される--></p>
+        <h1>Bit coin</h1>	
+			<div id="buttons">
+      			<button id="connect">Connect</button>
+			</div>
+			</div>
+		</div>
+	</div>
+</header>
+<section>
+	<div class="container">
+		<main>
+			<div class="main-inner">
+				<!-- コンテンツの要素 -->
+							<h3 id="about1">リアルタイム値</h3>
+								<p id="first"></p>
+							<h3 id="about2">平均値</h3>
+								<p id="second"></p>
+
+          </div><!-- /.main-inner -->
+		</main>
+	</div><!-- /.container -->
+
+</section>
+
+  <style>
+
+    #first {
+      background-color: #ADD8E6;
+      font-size: 12pt;
+      color: #FFF0F5;
+      padding: 15px;
+      margin: 50px;
+    }
+
+    #second {
+      background-color: #ADD8E6;
+      font-size: 12pt;
+      color: #FFF0F5;
+      padding: 15px;
+      margin: 50px;
+    }
+    
+
+    
+    h1{
+      font-size: 80pt;
+    }
+
+    h2{
+      font-size: 12pt;
+      color: goldenrod;
+      padding: 5px;
+      margin: 5px;
+    }
+    
+body {
+  background-image: url(images/head3.jpg);
+  background-size: cover;
+	margin: 0;
+	line-height: 20px;
+}
+.container {
+	margin: 0 auto;
+	padding: 0 16px;
+	max-width: 1000px;
+}
+
+.head{
+	display: inline-block;
+	padding: 20px;
+	margin: 10px;
+}
+.head h1{
+	font-family: fantasy;
+	color: #7CFC00;
+	    text-shadow: 2px 2px 1px #FFF,
+    -2px 2px 1px #FFF,
+    2px -2px 1px #FFF,
+    -2px -2px 1px #FFF;
+	font-size: 30pt;
+	padding: 15px;
+	margin: 10px;
+}
+
+
+</style>
+</div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.1.0/socket.io.slim.js" integrity="sha256-TjKvu34orT4v6tdwMFrmvqieKl/Rdep7T8hVq57FmEk=" crossorigin="anonymous"></script>
+
+<script>
+  /* global io */
+
+  /* global navigator */
+  treeProject();
+  /* -------- BLE Connection ----------- */
+  function treeProject() {
+    'use strict';
+
+    let uartReceiver;
+
+    //Check if browser supports Web Bluetooth API.
+    if (navigator.bluetooth == undefined) {
+      console.log("WebBluetooth is not supported in this platform.");
+    }
+
+    async function connectUart() {
+      try {
+        console.log('Connecting to micro:bit...');
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'BBC micro:bit' }],
+          optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] //Uart SERVICE SERVICE_UUID
+        });
+
+        console.log('Connecting to GATT Server...');
+        const server = await device.gatt.connect();
+
+        console.log('Getting Service...');
+        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e'); //Uart SERVICE SERVICE_UUID
+
+        console.log('Getting Uart characteristic...');
+        const characteristic = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e'); //Uart Write CHARACTERISTIC_UUID
+        uartReceiver = characteristic;
+        console.log('Uart characteristic is connected.');
+
+      }
+      catch (error) {
+        console.log('Argh! ' + error);
+      }
+    }
+
+    let value;
+    let lightcharacters=[0,0,0,0,0];
+    async function light() {
+      if (uartReceiver == undefined) {
+        console.log('Uart receiver is not connected.');
+        return;
+      }
+      try {
+        let encoder = new TextEncoder('utf-8');
+        if(lightcharacters[0]==1 && lightcharacters[2]==3){
+          value =  "H,"; // Delimiter is "," 
+        }
+          
+        if(lightcharacters[0]==1 && lightcharacters[3]==4){
+          value =  "I,"; // Delimiter is "," 
+        }
+          
+        if(lightcharacters[1]==2 && lightcharacters[2]==3){
+          value =  "J,"; // Delimiter is "," 
+        }
+          
+        if(lightcharacters[1]==2 && lightcharacters[3]==4){
+          value =  "K,"; // Delimiter is "," 
+        }
+
+        let _ = await uartReceiver.writeValue(encoder.encode(value));
+        console.log('> Characteristic value to send: ' + value);
+      }
+      catch (error) {
+        console.log('Argh! ' + error);
+      }
+    }//light()
+    
+
+    let button = document.querySelector("#connect");
+    button.addEventListener("click", connectUart);
+
+
+
+    const channelName = "lightning_board_snapshot_BTC_JPY";
+    const socket = io("https://io.lightstream.bitflyer.com", { transports: ["websocket"] });
+
+    socket.on("connect", () => {
+      socket.emit("subscribe", channelName);
+    });
+
+    socket.on(channelName, message => {
+      ishimitree(message);
+      console.log(message.mid_price);
+      document.querySelector("#first").innerHTML = (message.mid_price);
+    });
+    
+
+
+    var tree = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var ringcount = 0;
+
+    function ishimitree(message) {
+
+      tree[ringcount] = message.mid_price;
+      ringcount++;
+      if (ringcount >= tree.length) ringcount = 0;
+
+      let total = 0;
+      for (let j = 0; j < tree.length; j++) {
+        total += tree[j];
+      }
+      console.log(total / tree.length);
+      document.querySelector("#second").innerHTML = (total / tree.length);
+
+
+      if (total / tree.length + 10 <= message.mid_price) {
+        console.log("プラス");//平均値より10高い
+        lightcharacters[0]=1;
+      }
+        
+
+      if (total / tree.length - 10 >= message.mid_price) {
+        console.log("マイナス"); //平均値より10低い
+        lightcharacters[1]=2;
+      }
+        tenki();
+        light();
+    }//ishimitree()
+      
+    function tenki(){
+    $(document).ready(function () {
+
+    // YAHOO天気APIに必要
+      // http://developer.yahoo.co.jp/ の「アプリケーション管理」で取得！
+    var appid = "dj00aiZpPVBkSEQ5SHRZQ3hXSyZzPWNvbnN1bWVyc2VjcmV0Jng9NWM-";
+    var coord = "139.411102,35.615841"; //経度、緯度（唐木田周辺）
+
+    //getJSON[開始]
+    $.getJSON("http://weather.olp.yahooapis.jp/v1/place?callback=?&coordinates="+coord+"&output=json&appid="+appid, function tenki(data) {　　
+
+      //console.log(data); //JSONデータ確認用
+
+      //必要なデータ（JSON）を取得
+      var d = data.Feature[0].Property.WeatherList.Weather[0].Date;
+      var r0 = data.Feature[0].Property.WeatherList.Weather[0].Rainfall;
+
+
+      if(r0==0){
+        lightcharacters[2]=3;
+        console.log("晴れ"); 
+          $("#rain0").html('<img src="images/hare.png" style="position:absolute;top:50px;right:10px" width=80px>');
+
+      }
+
+        if(r0>=1){
+        lightcharacters[3]=4;
+           console.log("雨");  
+                $("#rain0").html('<img src="images/ame.png" style="position:absolute;top:50px;right:10px" width=80px>');
+      }      
+
+    });
+    //getJSON[END]
+     });
+    }//tenki()
+
+
+  }//treeproject()
+</script>
+
+</html>
